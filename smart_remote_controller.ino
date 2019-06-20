@@ -1,4 +1,3 @@
-// #include <IRremote.h>
 #include "ESP32_BME280_I2C.h"
 #include <Wire.h>
 #include "SSD1306Wire.h"
@@ -16,9 +15,6 @@ int BUTTON_PIN = 17;
 int STATUS_PIN = 16;
 int SEND_PIN = 4;
 
-//IRrecv irrecv(RECV_PIN);
-//IRsend irsend(SEND_PIN);
-//decode_results results;
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/14, /*sda*/27, 30000);
 
 SSD1306Wire  display(0x3c, 27, 14);
@@ -48,80 +44,59 @@ void setup()
   delay(1000);  
 }
 
-// Storage for the recorded code
-int codeType = -1; // The type of code
-unsigned long codeValue; // The code value if not raw
-// unsigned int rawCodes[RAWBUF]; // The durations if raw
-int codeLen; // The length of the code
-int toggle = 0; // The RC5/6 toggle state
-
-// Stores the code for later playback
-// Most of this code is just logging
-/*
-void storeCode(decode_results *results) {
-
-  codeType = results->decode_type;
-  //int count = results->rawlen;
-  if (codeType == UNKNOWN) {
-    Serial.println("Received unknown code, saving as raw");
-    codeLen = results->rawlen - 1;
-    // To store raw codes:
-    // Drop first value (gap)
-    // Convert from ticks to microseconds
-    // Tweak marks shorter, and spaces longer to cancel out IR receiver distortion
-    for (int i = 1; i <= codeLen; i++) {
-      if (i % 2) {
-        // Mark
-        rawCodes[i - 1] = results->rawbuf[i]*USECPERTICK - MARK_EXCESS;
-        Serial.print(" m");
-      } 
-      else {
-        // Space
-        rawCodes[i - 1] = results->rawbuf[i]*USECPERTICK + MARK_EXCESS;
-        Serial.print(" s");
+// ⑤赤外線受信（信号受信 or 15秒間を処理）
+bool irRecv () {
+  // ⑥irRecv関数内で利用する変数（ローカル変数）を定義
+  unsigned short irCount = 0;  // HIGH,LOWの信号数
+  unsigned long lastt = 0;    // 1つ前の経過時間を保持
+  unsigned long deltt = 0;    // 1つ前の経過時間を保持
+  unsigned long sMilli;     // 本処理の開始時間
+  unsigned long sMicro;     // 処理の開始時間
+  unsigned long wMicro;     // 待ち開始時間
+  bool rState = 0;        // 赤外線受信モジュールの状態 0:LOW,1:HIGH
+  sMilli = millis();      // ⑤現在のシステム時間を取得（ミリ秒で取得）
+  // ⑦特定条件(信号受信 or 15秒経過)するまで無限ループ
+  while(1) {
+    // ⑧Ir受信を待つ開始時間を取得
+    wMicro = micros();  // 現在のシステム時間を取得（マイクロ秒で取得）
+    // ⑨反転信号の受信待ち
+    while (digitalRead(RECV_PIN) == rState) {
+      // ⑩待ち始めて0.5秒以上経過したら
+      if (micros() - wMicro > 500000) {
+        // ⑪待ち始めて0.5秒以上経過したら
+        if ( irCount > 10 ) {
+          return true;  // ⑫正常に完了
+        }
+        // ⑬0,1信号が10個以上ない場合は雑音のため再度ゼロから受信
+        irCount = 0;
       }
-      Serial.print(rawCodes[i - 1], DEC);
-    }
-    Serial.println("");
-  }
-  else {
-    if (codeType == NEC) {
-      Serial.print("Received NEC: ");
-      if (results->value == REPEAT) {
-        // Don't record a NEC repeat value as that's useless.
-        Serial.println("repeat; ignoring.");
-        return;
+      // ⑭処理が15秒以上経過したらT.O.
+      if ( millis() - sMilli > 15000 ) {
+        return false; // ⑮15秒経過で終了（受信なし）
       }
-    } 
-    else if (codeType == SONY) {
-      Serial.print("Received SONY: ");
-    } 
-    else if (codeType == PANASONIC) {
-      Serial.print("Received PANASONIC: ");
     }
-    else if (codeType == JVC) {
-      Serial.print("Received JVC: ");
+    // ⑯信号受信開始時の現在の時間や経過時間を取得
+    if ( irCount == 0 ) {
+      sMicro = micros();
+      lastt = 0;
+      irCount++;
+      Serial.println("ir:");
+    // ⑰信号受信処理開始後の処理（irCountが1以上）
+    } else {
+      // ⑱赤外線受信部の状態変化が最後に変化した時間からの経過時間を計算
+      deltt = ( (micros() - sMicro)/ 10 ) - lastt;
+      // ⑲次回経過時間計算のため最後に変化した経過時間を保存
+      lastt = lastt + deltt;
+      irCount++;
+      Serial.print(deltt);
+      Serial.print(",");
     }
-    else if (codeType == RC5) {
-      Serial.print("Received RC5: ");
-    } 
-    else if (codeType == RC6) {
-      Serial.print("Received RC6: ");
-    }
-    else {
-      Serial.print("Unexpected codeType ");
-      Serial.print(codeType, DEC);
-      Serial.println("");
-    }
-    Serial.println(results->value, HEX);
-    codeValue = results->value;
-    codeLen = results->bits;
+    // ⑳次回While内で状態変化を検知する値を変更
+    rState = !rState;
   }
-
 }
-*/
-void sendCode(int repeat) {
 /*
+void sendCode(int repeat) {
   if (codeType == NEC) {
     if (repeat) {
       irsend.sendNEC(REPEAT, codeLen);
@@ -172,12 +147,20 @@ void sendCode(int repeat) {
     irsend.sendRaw(rawCodes, codeLen, 38);
     Serial.println("Sent raw");
   }
-  */
 }
+*/
 
 int lastButtonState;
 
 void loopIR() {
+  if ( irRecv () ) {      // ②赤外線受信処理の実行
+    Serial.println();
+    Serial.println("RcvOK");  // ③信号を正常に受信した場合に表示
+  } else {
+    Serial.println();
+    Serial.println("NoSig");  // ④30秒間信号がない場合に表示
+  }
+/*
   // If button pressed, send the code.
   int buttonState = digitalRead(BUTTON_PIN);
   if (lastButtonState == HIGH && buttonState == LOW) {
@@ -199,7 +182,7 @@ void loopIR() {
     // irrecv.resume(); // resume receiver
     digitalWrite(STATUS_PIN, LOW);
   }
-*/  lastButtonState = buttonState;
+*/
 }
 
 double temperatures[SCREEN_WIDTH] = {0};
