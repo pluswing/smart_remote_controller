@@ -15,6 +15,8 @@ int BUTTON_PIN = 17;
 int STATUS_PIN = 16;
 int SEND_PIN = 4;
 
+unsigned short irData[] ={ 347,172,40,41,175 };
+
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/14, /*sda*/27, 30000);
 
 SSD1306Wire  display(0x3c, 27, 14);
@@ -28,11 +30,12 @@ void setup()
   // irrecv.enableIRIn(); // Start the receiver
   pinMode(BUTTON_PIN, INPUT);
   pinMode(STATUS_PIN, OUTPUT);
+  pinMode(SEND_PIN, OUTPUT);
 
   // init display
   display.init();
   display.flipScreenVertically();
-  
+
   // init BME280
   uint8_t t_sb = 0; //stanby 0.5ms
   uint8_t filter = 4; //IIR filter = 16
@@ -41,7 +44,7 @@ void setup()
   uint8_t osrs_h = 1; //OverSampling Humidity x1
   uint8_t Mode = 3; //Normal mode
   bme280i2c.ESP32_BME280_I2C_Init(t_sb, filter, osrs_t, osrs_p, osrs_h, Mode);
-  delay(1000);  
+  delay(1000);
 }
 
 // ⑤赤外線受信（信号受信 or 15秒間を処理）
@@ -95,64 +98,45 @@ bool irRecv () {
     rState = !rState;
   }
 }
-/*
-void sendCode(int repeat) {
-  if (codeType == NEC) {
-    if (repeat) {
-      irsend.sendNEC(REPEAT, codeLen);
-      Serial.println("Sent NEC repeat");
-    } 
-    else {
-      irsend.sendNEC(codeValue, codeLen);
-      Serial.print("Sent NEC ");
-      Serial.println(codeValue, HEX);
-    }
-  } 
-  else if (codeType == SONY) {
-    irsend.sendSony(codeValue, codeLen);
-    Serial.print("Sent Sony ");
-    Serial.println(codeValue, HEX);
-  } 
-  else if (codeType == PANASONIC) {
-    irsend.sendPanasonic(codeValue, codeLen);
-    Serial.print("Sent Panasonic");
-    Serial.println(codeValue, HEX);
-  }
-  else if (codeType == JVC) {
-    irsend.sendJVC(codeValue, codeLen, false);
-    Serial.print("Sent JVC");
-    Serial.println(codeValue, HEX);
-  }
-  else if (codeType == RC5 || codeType == RC6) {
-    if (!repeat) {
-      // Flip the toggle bit for a new button press
-      toggle = 1 - toggle;
-    }
-    // Put the toggle bit into the code to send
-    codeValue = codeValue & ~(1 << (codeLen - 1));
-    codeValue = codeValue | (toggle << (codeLen - 1));
-    if (codeType == RC5) {
-      Serial.print("Sent RC5 ");
-      Serial.println(codeValue, HEX);
-      irsend.sendRC5(codeValue, codeLen);
-    } 
-    else {
-      irsend.sendRC6(codeValue, codeLen);
-      Serial.print("Sent RC6 ");
-      Serial.println(codeValue, HEX);
-    }
-  } 
-  else if (codeType == UNKNOWN) {
-    // Assume 38 KHz
-    irsend.sendRaw(rawCodes, codeLen, 38);
-    Serial.println("Sent raw");
+
+// ⑦赤外線送信処理
+void irSend () {
+  // ⑧ローカル変数定義
+  unsigned short irCount = 0; // HIGH,LOWの信号数
+  unsigned long l_now = 0;    // 送信開始時間を保持
+  unsigned long sndt = 0;     // 送信開始からの経過時間
+  // ⑨HIGH,LOWの信号数を計算
+  irCount = sizeof(irData) / sizeof(irData[0]);
+  // ⑩送信開始時間を取得
+  l_now = micros();
+  // ⑪0,1の信号回数分をFor文でループ
+  for (int i = 0; i < irCount; i++) {
+    // ⑫送信開始からの信号終了時間を計算
+    sndt += irData[i];
+    do {
+      // ⑬iが偶数なら赤外線ON、奇数ならOFFのまま
+      // ⑭キャリア周波数38kHz(約26μSec周期の半分)でON時間で送信
+      digitalWrite(SEND_PIN, !(i&1));
+      microWait(13);
+      // ⑮キャリア周波数38kHz(約26μSec周期の半分)でOFF時間で送信
+      digitalWrite(SEND_PIN, 0);
+      microWait(13);
+    // ⑯送信開始からの信号終了時間が超えるまでループ
+    } while (long(l_now + (sndt * 10) - micros()) > 0);
   }
 }
-*/
+
+// ⑰マイクロ秒単位で待つ
+void microWait(signed long waitTime) {
+  unsigned long waitStartMicros = micros();
+  // ⑱指定されたマイクロ秒が経過するまでWhileでループ処理（待つ）
+  while (micros() - waitStartMicros < waitTime) {};
+}
 
 int lastButtonState;
 
 void loopIR() {
+/*
   if ( irRecv () ) {      // ②赤外線受信処理の実行
     Serial.println();
     Serial.println("RcvOK");  // ③信号を正常に受信した場合に表示
@@ -160,6 +144,10 @@ void loopIR() {
     Serial.println();
     Serial.println("NoSig");  // ④30秒間信号がない場合に表示
   }
+*/
+  irSend ();                  // ⑤赤外線送信する関数を実行
+  Serial.println("SndOK");
+  delay(10000);
 /*
   // If button pressed, send the code.
   int buttonState = digitalRead(BUTTON_PIN);
@@ -174,7 +162,7 @@ void loopIR() {
     // sendCode(lastButtonState == buttonState);
     digitalWrite(STATUS_PIN, LOW);
     delay(50); // Wait a bit between retransmissions
-  } 
+  }
 /*
   else if (irrecv.decode(&results)) {
     digitalWrite(STATUS_PIN, HIGH);
