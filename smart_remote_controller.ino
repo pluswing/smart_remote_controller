@@ -15,7 +15,8 @@ int BUTTON_PIN = 17;
 int STATUS_PIN = 16;
 int SEND_PIN = 4;
 
-unsigned short irData[] ={ 347,172,40,41,175 };
+unsigned short irData[1500] = { 0 };
+unsigned int irLength = 0;
 
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/14, /*sda*/27, 30000);
 
@@ -58,6 +59,7 @@ bool irRecv () {
   unsigned long wMicro;     // 待ち開始時間
   bool rState = 0;        // 赤外線受信モジュールの状態 0:LOW,1:HIGH
   sMilli = millis();      // ⑤現在のシステム時間を取得（ミリ秒で取得）
+  irLength = 0;
   // ⑦特定条件(信号受信 or 15秒経過)するまで無限ループ
   while(1) {
     // ⑧Ir受信を待つ開始時間を取得
@@ -72,6 +74,7 @@ bool irRecv () {
         }
         // ⑬0,1信号が10個以上ない場合は雑音のため再度ゼロから受信
         irCount = 0;
+        irLength = 0;
       }
       // ⑭処理が15秒以上経過したらT.O.
       if ( millis() - sMilli > 15000 ) {
@@ -91,6 +94,8 @@ bool irRecv () {
       // ⑲次回経過時間計算のため最後に変化した経過時間を保存
       lastt = lastt + deltt;
       irCount++;
+      irData[irLength] = deltt;
+      irLength++;
       Serial.print(deltt);
       Serial.print(",");
     }
@@ -106,13 +111,15 @@ void irSend () {
   unsigned long l_now = 0;    // 送信開始時間を保持
   unsigned long sndt = 0;     // 送信開始からの経過時間
   // ⑨HIGH,LOWの信号数を計算
-  irCount = sizeof(irData) / sizeof(irData[0]);
+  irCount = irLength;
   // ⑩送信開始時間を取得
   l_now = micros();
   // ⑪0,1の信号回数分をFor文でループ
   for (int i = 0; i < irCount; i++) {
     // ⑫送信開始からの信号終了時間を計算
     sndt += irData[i];
+    Serial.print(irData[i]);
+    Serial.print(",");
     do {
       // ⑬iが偶数なら赤外線ON、奇数ならOFFのまま
       // ⑭キャリア周波数38kHz(約26μSec周期の半分)でON時間で送信
@@ -136,41 +143,15 @@ void microWait(signed long waitTime) {
 int lastButtonState;
 
 void loopIR() {
-/*
-  if ( irRecv () ) {      // ②赤外線受信処理の実行
-    Serial.println();
-    Serial.println("RcvOK");  // ③信号を正常に受信した場合に表示
-  } else {
-    Serial.println();
-    Serial.println("NoSig");  // ④30秒間信号がない場合に表示
-  }
-*/
-  irSend ();                  // ⑤赤外線送信する関数を実行
-  Serial.println("SndOK");
-  delay(10000);
-/*
-  // If button pressed, send the code.
-  int buttonState = digitalRead(BUTTON_PIN);
-  if (lastButtonState == HIGH && buttonState == LOW) {
-    Serial.println("Released");
-    // irrecv.enableIRIn(); // Re-enable receiver
+  if (irLength == 0) {
+    Serial.print("receive");
+    irRecv();
+    return;
   }
 
-  if (buttonState) {
-    Serial.println("Pressed, sending");
-    digitalWrite(STATUS_PIN, HIGH);
-    // sendCode(lastButtonState == buttonState);
-    digitalWrite(STATUS_PIN, LOW);
-    delay(50); // Wait a bit between retransmissions
-  }
-/*
-  else if (irrecv.decode(&results)) {
-    digitalWrite(STATUS_PIN, HIGH);
-    // storeCode(&results);
-    // irrecv.resume(); // resume receiver
-    digitalWrite(STATUS_PIN, LOW);
-  }
-*/
+  irSend();
+  Serial.println("SndOK");
+  delay(3000);
 }
 
 double temperatures[SCREEN_WIDTH] = {0};
