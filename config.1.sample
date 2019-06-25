@@ -1,0 +1,6 @@
+const char* SSID = "";
+const char* SSID_PASSWORD = "";
+IPAddress IP_ADDRESS(192, 168, 1, 123);
+IPAddress GATEWAY(192, 168, 1, 1);
+IPAddress SUBNET(255, 255, 255, 0);
+IPAddress DNS(192, 168, 1, 1);

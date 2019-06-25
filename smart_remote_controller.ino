@@ -1,6 +1,9 @@
 #include "ESP32_BME280_I2C.h"
 #include <Wire.h>
 #include "SSD1306Wire.h"
+#include <WiFiClientSecure.h>
+#include <ESPAsyncWebServer.h>
+#include "config.h"
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -19,8 +22,30 @@ unsigned short irData[1500] = { 0 };
 unsigned int irLength = 0;
 
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/14, /*sda*/27, 30000);
+SSD1306Wire display(0x3c, 27, 14);
+AsyncWebServer webServer(80);
 
-SSD1306Wire  display(0x3c, 27, 14);
+void setupWIFI() {
+  Serial.println( "Wi-Fi SetUp" );
+  WiFi.config(IP_ADDRESS, GATEWAY, SUBNET, DNS);
+  WiFi.begin(SSID, SSID_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  Serial.print("Wi-Fi Connected! IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void setupWebserver() {
+  webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("Top");
+    request->send(200, "text", "ok");
+  });
+
+  webServer.begin();
+  Serial.println("Web server started");
+}
 
 void setup()
 {
@@ -46,6 +71,9 @@ void setup()
   uint8_t Mode = 3; //Normal mode
   bme280i2c.ESP32_BME280_I2C_Init(t_sb, filter, osrs_t, osrs_p, osrs_h, Mode);
   delay(1000);
+
+  setupWIFI();
+  setupWebserver();
 }
 
 // ⑤赤外線受信（信号受信 or 15秒間を処理）
