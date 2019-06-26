@@ -43,12 +43,27 @@ void setupWebserver() {
     request->send(200, "text", "ok");
   });
 
+  webServer.on("/irrecv", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("IR Receive");
+    bool ok = irRecv();
+    request->send(200, "text", ok ? "ok" : "ng");
+  });
+
+  webServer.on("/irsend", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("IR Send");
+    if (irLength == 0) {
+      request->send(200, "text", "ng");
+      return;
+    }
+    irSend();
+    request->send(200, "text", "ok");
+  });
+
   webServer.begin();
   Serial.println("Web server started");
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(SERIAL_BAUD);
   while(!Serial) {}
 
@@ -77,7 +92,7 @@ void setup()
 }
 
 // ⑤赤外線受信（信号受信 or 15秒間を処理）
-bool irRecv () {
+bool irRecv() {
   // ⑥irRecv関数内で利用する変数（ローカル変数）を定義
   unsigned short irCount = 0;  // HIGH,LOWの信号数
   unsigned long lastt = 0;    // 1つ前の経過時間を保持
@@ -133,7 +148,7 @@ bool irRecv () {
 }
 
 // ⑦赤外線送信処理
-void irSend () {
+void irSend() {
   // ⑧ローカル変数定義
   unsigned short irCount = 0; // HIGH,LOWの信号数
   unsigned long l_now = 0;    // 送信開始時間を保持
@@ -196,7 +211,7 @@ void loopBME() {
 
   double temperature, pressure, humidity;
   bme280i2c.Read_All(&temperature, &pressure, &humidity);
-
+/*
   Serial.print("Temp: ");
   Serial.print(temperature);
   Serial.print("C");
@@ -206,7 +221,7 @@ void loopBME() {
   Serial.print(" tPressure: ");
   Serial.print(pressure);
   Serial.println("hPa");
-
+*/
   temperatures[currentIndex] = temperature;
   currentIndex = (currentIndex + 1) % SCREEN_WIDTH;
 
@@ -228,6 +243,6 @@ void loopBME() {
 }
 
 void loop() {
-  loopIR();
+  // loopIR();
   loopBME();
 }
