@@ -18,8 +18,8 @@ int BUTTON_PIN = 17;
 int STATUS_PIN = 16;
 int SEND_PIN = 4;
 
-unsigned short irData[1500] = { 0 };
-unsigned int irLength = 0;
+unsigned short irData[10][1500] = { 0 };
+unsigned int irLength[10] = { 0 };
 
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/14, /*sda*/27, 30000);
 SSD1306Wire display(0x3c, 27, 14);
@@ -39,23 +39,26 @@ void setupWIFI() {
 
 void setupWebserver() {
   webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial.println("Top");
+    String no = request->getParam("n")->value();
+    Serial.println("Top" + no);
     request->send(200, "text", "ok");
   });
 
   webServer.on("/irrecv", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial.println("IR Receive");
-    bool ok = irRecv();
+    String no = request->getParam("n")->value();
+    Serial.println("IR Receive:" + no);
+    bool ok = irRecv(irData[no.toInt()], &irLength[no.toInt()]);
     request->send(200, "text", ok ? "ok" : "ng");
   });
 
   webServer.on("/irsend", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial.println("IR Send");
-    if (irLength == 0) {
+    String no = request->getParam("n")->value();
+    Serial.println("IR Send" + no);
+    if (irLength[no.toInt()] == 0) {
       request->send(200, "text", "ng");
       return;
     }
-    irSend();
+    irSend(irData[no.toInt()], irLength[no.toInt()]);
     request->send(200, "text", "ok");
   });
 
@@ -92,7 +95,7 @@ void setup() {
 }
 
 // ⑤赤外線受信（信号受信 or 15秒間を処理）
-bool irRecv() {
+bool irRecv(unsigned short *irData, unsigned int *irLength) {
   // ⑥irRecv関数内で利用する変数（ローカル変数）を定義
   unsigned short irCount = 0;  // HIGH,LOWの信号数
   unsigned long lastt = 0;    // 1つ前の経過時間を保持
@@ -102,7 +105,7 @@ bool irRecv() {
   unsigned long wMicro;     // 待ち開始時間
   bool rState = 0;        // 赤外線受信モジュールの状態 0:LOW,1:HIGH
   sMilli = millis();      // ⑤現在のシステム時間を取得（ミリ秒で取得）
-  irLength = 0;
+  *irLength = 0;
   // ⑦特定条件(信号受信 or 15秒経過)するまで無限ループ
   while(1) {
     // ⑧Ir受信を待つ開始時間を取得
@@ -117,7 +120,7 @@ bool irRecv() {
         }
         // ⑬0,1信号が10個以上ない場合は雑音のため再度ゼロから受信
         irCount = 0;
-        irLength = 0;
+        *irLength = 0;
       }
       // ⑭処理が15秒以上経過したらT.O.
       if ( millis() - sMilli > 15000 ) {
@@ -137,8 +140,8 @@ bool irRecv() {
       // ⑲次回経過時間計算のため最後に変化した経過時間を保存
       lastt = lastt + deltt;
       irCount++;
-      irData[irLength] = deltt;
-      irLength++;
+      irData[*irLength] = deltt;
+      (*irLength)++;
       Serial.print(deltt);
       Serial.print(",");
     }
@@ -148,7 +151,7 @@ bool irRecv() {
 }
 
 // ⑦赤外線送信処理
-void irSend() {
+void irSend(unsigned short *irData, unsigned int irLength) {
   // ⑧ローカル変数定義
   unsigned short irCount = 0; // HIGH,LOWの信号数
   unsigned long l_now = 0;    // 送信開始時間を保持
@@ -181,20 +184,6 @@ void microWait(signed long waitTime) {
   unsigned long waitStartMicros = micros();
   // ⑱指定されたマイクロ秒が経過するまでWhileでループ処理（待つ）
   while (micros() - waitStartMicros < waitTime) {};
-}
-
-int lastButtonState;
-
-void loopIR() {
-  if (irLength == 0) {
-    Serial.print("receive");
-    irRecv();
-    return;
-  }
-
-  irSend();
-  Serial.println("SndOK");
-  delay(3000);
 }
 
 double temperatures[SCREEN_WIDTH] = {0};
@@ -243,6 +232,5 @@ void loopBME() {
 }
 
 void loop() {
-  // loopIR();
   loopBME();
 }
