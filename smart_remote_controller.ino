@@ -25,6 +25,49 @@ ESP32_BME280_I2C bme280i2c(0x76, /*scl*/14, /*sda*/27, 30000);
 SSD1306Wire display(0x3c, 27, 14);
 AsyncWebServer webServer(80);
 
+void setup() {
+  setupSerial();
+  setupIO();
+  setupDisplay();
+  setupBME();
+  setupWIFI();
+  setupWebserver();
+}
+
+void loop() {
+  loopBME();
+}
+
+void setupSerial() {
+  Serial.begin(SERIAL_BAUD);
+  while(!Serial) {}
+}
+
+void setupIO() {
+  pinMode(BUTTON_PIN, INPUT);
+  pinMode(STATUS_PIN, OUTPUT);
+  pinMode(SEND_PIN, OUTPUT);
+}
+
+void setupDisplay() {
+  display.init();
+  display.flipScreenVertically();
+}
+
+void setupBME() {
+  uint8_t t_sb = 0; //stanby 0.5ms
+  uint8_t filter = 4; //IIR filter = 16
+  uint8_t osrs_t = 2; //OverSampling Temperature x2
+  uint8_t osrs_p = 5; //OverSampling Pressure x16
+  uint8_t osrs_h = 1; //OverSampling Humidity x1
+  uint8_t Mode = 3; //Normal mode
+  bme280i2c.ESP32_BME280_I2C_Init(t_sb, filter, osrs_t, osrs_p, osrs_h, Mode);
+
+  // BMEの初期化が非同期なので、（たぶん）ちょっと待たないと
+  // うまく初期化されない。
+  delay(1000);
+}
+
 void setupWIFI() {
   Serial.println( "Wi-Fi SetUp" );
   WiFi.config(IP_ADDRESS, GATEWAY, SUBNET, DNS);
@@ -66,35 +109,6 @@ void setupWebserver() {
   Serial.println("Web server started");
 }
 
-void setup() {
-  Serial.begin(SERIAL_BAUD);
-  while(!Serial) {}
-
-  // init IR
-  // irrecv.enableIRIn(); // Start the receiver
-  pinMode(BUTTON_PIN, INPUT);
-  pinMode(STATUS_PIN, OUTPUT);
-  pinMode(SEND_PIN, OUTPUT);
-
-  // init display
-  display.init();
-  display.flipScreenVertically();
-
-  // init BME280
-  uint8_t t_sb = 0; //stanby 0.5ms
-  uint8_t filter = 4; //IIR filter = 16
-  uint8_t osrs_t = 2; //OverSampling Temperature x2
-  uint8_t osrs_p = 5; //OverSampling Pressure x16
-  uint8_t osrs_h = 1; //OverSampling Humidity x1
-  uint8_t Mode = 3; //Normal mode
-  bme280i2c.ESP32_BME280_I2C_Init(t_sb, filter, osrs_t, osrs_p, osrs_h, Mode);
-  delay(1000);
-
-  setupWIFI();
-  setupWebserver();
-}
-
-// ⑤赤外線受信（信号受信 or 15秒間を処理）
 bool irRecv(unsigned short *irData, unsigned int *irLength) {
   // ⑥irRecv関数内で利用する変数（ローカル変数）を定義
   unsigned short irCount = 0;  // HIGH,LOWの信号数
@@ -186,6 +200,8 @@ void microWait(signed long waitTime) {
   while (micros() - waitStartMicros < waitTime) {};
 }
 
+// ---------------------------------------------
+
 double temperatures[SCREEN_WIDTH] = {0};
 int currentIndex = 0;
 
@@ -229,8 +245,4 @@ void loopBME() {
   //display.drawString(0, 20, "Humidity:" + String(humidity) + "%");
   //display.drawString(0, 40, "Pressure:" + String(pressure) + "hPa");
   display.display();
-}
-
-void loop() {
-  loopBME();
 }
