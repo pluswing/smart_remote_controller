@@ -3,6 +3,7 @@
 #include "SSD1306Wire.h"
 #include <WiFiClientSecure.h>
 #include <ESPAsyncWebServer.h>
+#include <ArduinoJson.h>
 #include "config.h"
 
 #define SCREEN_WIDTH 128
@@ -90,8 +91,20 @@ void setupWebserver() {
   webServer.on("/irrecv", HTTP_GET, [](AsyncWebServerRequest *request){
     String no = request->getParam("n")->value();
     Serial.println("IR Receive:" + no);
+    delay(500);
     bool ok = irRecv(irData[no.toInt()], &irLength[no.toInt()]);
-    request->send(200, "text", ok ? "ok" : "ng");
+    if (ok) {
+      DynamicJsonDocument doc(1500);
+      JsonArray data = doc.createNestedArray("data");
+      for (int i = 0; i < irLength[no.toInt()]; i++) {
+        data.add(irData[no.toInt()][i]);
+      }
+      char ir[1500];
+      serializeJson(doc, ir, 1500);
+      request->send(200, "application/json", ir);
+    } else {
+      request->send(500);
+    }
   });
 
   webServer.on("/irsend", HTTP_GET, [](AsyncWebServerRequest *request){
