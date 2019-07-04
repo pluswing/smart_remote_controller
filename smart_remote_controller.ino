@@ -122,10 +122,15 @@ void setupWebserver() {
   AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/irsend2", [](AsyncWebServerRequest *request, JsonVariant &json) {
     Serial.println("irsend2");
     JsonObject jsonObj = json.as<JsonObject>();
-    char ir[1500];
-    serializeJson(jsonObj, ir, 1500);
-    Serial.println(ir);
-  });
+    JsonArray data = jsonObj["data"];
+    unsigned short ir[1500];
+    for (int i = 0; i < data.size(); i++) {
+      ir[i] = data[i];
+    }
+    irSend(ir, data.size());
+    request->send(200, "text", "ok");
+  }, 1500); // maxJsonBufferSize
+  handler->setMethod(HTTP_POST);
   webServer.addHandler(handler);
 
   webServer.begin();
