@@ -1,9 +1,10 @@
-#include "ESP32_BME280_I2C.h"
+#include <ESP32_BME280_I2C.h>
 #include <Wire.h>
-#include "SSD1306Wire.h"
+#include <SSD1306Wire.h>
 #include <WiFiClientSecure.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <AsyncJson.h>
 #include "config.h"
 
 #define SCREEN_WIDTH 128
@@ -117,6 +118,15 @@ void setupWebserver() {
     irSend(irData[no.toInt()], irLength[no.toInt()]);
     request->send(200, "text", "ok");
   });
+
+  AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/irsend2", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    Serial.println("irsend2");
+    JsonObject jsonObj = json.as<JsonObject>();
+    char ir[1500];
+    serializeJson(jsonObj, ir, 1500);
+    Serial.println(ir);
+  });
+  webServer.addHandler(handler);
 
   webServer.begin();
   Serial.println("Web server started");
