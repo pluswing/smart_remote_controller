@@ -90,27 +90,30 @@ void setupWebserver() {
   });
 
   webServer.on("/irrecv", HTTP_GET, [](AsyncWebServerRequest *request){
-    String no = request->getParam("n")->value();
-    Serial.println("IR Receive:" + no);
     delay(500);
-    bool ok = irRecv(irData[no.toInt()], &irLength[no.toInt()]);
+    unsigned short ir[1500];
+    unsigned int len = 0;
+
+    bool ok = irRecv(ir, &len);
+
     if (ok) {
       DynamicJsonDocument doc(1500);
       JsonArray data = doc.createNestedArray("data");
-      for (int i = 0; i < irLength[no.toInt()]; i++) {
-        data.add(irData[no.toInt()][i]);
+      for (int i = 0; i < len; i++) {
+        data.add(ir[i]);
       }
-      char ir[1500];
-      serializeJson(doc, ir, 1500);
-      request->send(200, "application/json", ir);
+
+      char jsonString[1500];
+      serializeJson(doc, jsonString, 1500);
+      request->send(200, "application/json", jsonString);
     } else {
       request->send(500);
     }
   });
 
-  webServer.on("/irsend", HTTP_GET, [](AsyncWebServerRequest *request){
+  webServer.on("/irsend_in_memory", HTTP_GET, [](AsyncWebServerRequest *request){
     String no = request->getParam("n")->value();
-    Serial.println("IR Send" + no);
+    Serial.println("IR Send IN Memory" + no);
     if (irLength[no.toInt()] == 0) {
       request->send(200, "text", "ng");
       return;
@@ -119,8 +122,8 @@ void setupWebserver() {
     request->send(200, "text", "ok");
   });
 
-  AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/irsend2", [](AsyncWebServerRequest *request, JsonVariant &json) {
-    Serial.println("irsend2");
+  AsyncCallbackJsonWebHandler* irsendHandler = new AsyncCallbackJsonWebHandler("/irsend", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    Serial.println("irsend");
     JsonObject jsonObj = json.as<JsonObject>();
     JsonArray data = jsonObj["data"];
     unsigned short ir[1500];
@@ -130,8 +133,29 @@ void setupWebserver() {
     irSend(ir, data.size());
     request->send(200, "text", "ok");
   }, 1500); // maxJsonBufferSize
-  handler->setMethod(HTTP_POST);
-  webServer.addHandler(handler);
+  irsendHandler->setMethod(HTTP_POST);
+  webServer.addHandler(irsendHandler);
+
+  AsyncCallbackJsonWebHandler* irsaveHandler = new AsyncCallbackJsonWebHandler("/irsave", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    Serial.println("irsave");
+    JsonObject jsonObj = json.as<JsonObject>();
+    JsonArray data = jsonObj["data"];
+    int no = jsonObj["no"];
+
+    // 保存する
+    for (int i = 0; i < data.size(); i++) {
+      irData[no][i] = data[i];
+    }
+    irLength[no] = data.size();
+
+    request->send(200, "text", "ok");
+  }, 1500); // maxJsonBufferSize
+  irsaveHandler->setMethod(HTTP_POST);
+  webServer.addHandler(irsaveHandler);
+
+  webServer.onNotFound([](AsyncWebServerRequest *request){
+    request->send(404);
+  });
 
   webServer.begin();
   Serial.println("Web server started");
