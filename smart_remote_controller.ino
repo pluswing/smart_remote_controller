@@ -21,9 +21,6 @@ int BUTTON_PIN = 17;
 int STATUS_PIN = 16;
 int SEND_PIN = 4;
 
-unsigned short irData[10][1500] = {0};
-unsigned int irLength[10] = {0};
-
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/ 14, /*sda*/ 27, 30000);
 SSD1306Wire display(0x3c, 27, 14);
 AsyncWebServer webServer(80);
@@ -118,8 +115,8 @@ void setupWebserver()
         data.add(ir[i]);
       }
 
-      char jsonString[1500];
-      serializeJson(doc, jsonString, 1500);
+      String jsonString;
+      serializeJson(doc, jsonString);
       request->send(200, "application/json", jsonString);
     }
     else
@@ -129,6 +126,12 @@ void setupWebserver()
   });
 
   webServer.on("/irsend_in_memory", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!request->hasParam("n"))
+    {
+      request->send(200, "text", "ng");
+      return;
+    }
+
     String no = request->getParam("n")->value();
     Serial.println("IR Send IN Memory" + no);
 
@@ -309,6 +312,7 @@ void irSave(int no, JsonDocument &doc)
   f.println(jsonString.c_str());
   f.close();
 }
+
 bool irRead(int no, JsonDocument &doc)
 {
   String fname = "/ir_" + String(no) + ".json";

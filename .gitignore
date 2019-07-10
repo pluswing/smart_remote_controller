@@ -1,1 +1,4 @@
 config.h
+.vscode/*
+!.vscode/settings.json
+
