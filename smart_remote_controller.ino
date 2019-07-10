@@ -5,6 +5,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <AsyncJson.h>
+#include <SPIFFS.h>
 #include "config.h"
 
 #define SCREEN_WIDTH 128
@@ -49,6 +50,7 @@ void setupIO() {
   pinMode(BUTTON_PIN, INPUT);
   pinMode(STATUS_PIN, OUTPUT);
   pinMode(SEND_PIN, OUTPUT);
+  SPIFFS.begin();
 }
 
 void setupDisplay() {
@@ -114,11 +116,20 @@ void setupWebserver() {
   webServer.on("/irsend_in_memory", HTTP_GET, [](AsyncWebServerRequest *request){
     String no = request->getParam("n")->value();
     Serial.println("IR Send IN Memory" + no);
-    if (irLength[no.toInt()] == 0) {
+
+    DynamicJsonDocument doc(1500);
+    bool ok = irRead(no.toInt(), doc);
+
+    if (!ok) {
       request->send(200, "text", "ng");
       return;
     }
-    irSend(irData[no.toInt()], irLength[no.toInt()]);
+    JsonArray data = doc["data"];
+    unsigned short ir[1500];
+    for (int i = 0; i < data.size(); i++) {
+      ir[i] = data[i];
+    }
+    irSend(ir, data.size());
     request->send(200, "text", "ok");
   });
 
@@ -143,10 +154,11 @@ void setupWebserver() {
     int no = jsonObj["no"];
 
     // 保存する
-    for (int i = 0; i < data.size(); i++) {
-      irData[no][i] = data[i];
-    }
-    irLength[no] = data.size();
+    // {"data":[....], "name": "あいうえお"}
+    DynamicJsonDocument doc(1500);
+    doc["data"] = jsonObj["data"];
+    doc["name"] = jsonObj["name"];
+    irSave(no, doc);
 
     request->send(200, "text", "ok");
   }, 1500); // maxJsonBufferSize
@@ -252,6 +264,26 @@ void microWait(signed long waitTime) {
   while (micros() - waitStartMicros < waitTime) {};
 }
 
+// ---------------------------------------------
+void irSave(int no, JsonDocument& doc) {
+  String fname = "/ir_" + String(no) + ".json";
+  File f = SPIFFS.open(fname.c_str(), "w");
+  String jsonString;
+  serializeJson(doc, jsonString);
+  f.println(jsonString.c_str());
+  f.close();
+}
+bool irRead(int no, JsonDocument& doc) {
+  String fname = "/ir_" + String(no) + ".json";
+  File f = SPIFFS.open(fname.c_str(), "r");
+  if (!f) {
+    return false;
+  }
+  char content[1500];
+  f.readBytes(content, 1500);
+  deserializeJson(doc, content);
+  return true;
+}
 // ---------------------------------------------
 
 double temperatures[SCREEN_WIDTH] = {0};
