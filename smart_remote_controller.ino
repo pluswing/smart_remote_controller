@@ -33,6 +33,17 @@ ESP32_BME280_I2C bme280i2c(0x76, /*scl*/ 14, /*sda*/ 27, 30000);
 SSD1306Wire display(0x3c, 27, 14);
 AsyncWebServer webServer(80);
 Ticker bme280Ticker;
+double temperatures[SCREEN_WIDTH] = {0};
+double pressures[SCREEN_WIDTH] = {0};
+double humidities[SCREEN_WIDTH] = {0};
+int currentIndex = 0;
+bool collectBME280Flag = true;
+typedef void (*DisplayScene)(void);
+void displayTemperature();
+void displayHumidity();
+void displayPressure();
+DisplayScene scenes[] = {displayTemperature, displayHumidity, displayPressure};
+DisplayScene scene;
 
 void setup()
 {
@@ -104,8 +115,6 @@ void setupWIFI()
 void setupWebserver()
 {
   webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    String no = request->getParam("n")->value();
-    Serial.println("Top" + no);
     request->send(200, "text", "ok");
   });
 
@@ -241,6 +250,64 @@ void setupWebserver()
                                                                                  1500); // maxJsonBufferSize
   irrenameHandler->setMethod(HTTP_POST);
   webServer.addHandler(irrenameHandler);
+
+  webServer.on("/sensor_values", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!request->hasParam("t"))
+    {
+      request->send(404, "application/json", "{}");
+      return;
+    }
+
+    String type = request->getParam("t")->value();
+    Serial.println("sensor_values" + type);
+
+    // {"data": [24.05, 24.06, ...]}
+    DynamicJsonDocument doc(1500);
+    JsonArray data = doc.createNestedArray("data");
+
+    if (type == "temperature")
+    {
+      for (int i = 0; i < SCREEN_WIDTH; i++)
+      {
+        int idx = currentIndex - i - 1;
+        if (idx < 0)
+          idx += SCREEN_WIDTH;
+
+        data.add(temperatures[idx]);
+      }
+    }
+    else if (type == "humidity")
+    {
+      for (int i = 0; i < SCREEN_WIDTH; i++)
+      {
+        int idx = currentIndex - i - 1;
+        if (idx < 0)
+          idx += SCREEN_WIDTH;
+
+        data.add(humidities[idx]);
+      }
+    }
+    else if (type == "pressure")
+    {
+      for (int i = 0; i < SCREEN_WIDTH; i++)
+      {
+        int idx = currentIndex - i - 1;
+        if (idx < 0)
+          idx += SCREEN_WIDTH;
+
+        data.add(pressures[idx]);
+      }
+    }
+    else
+    {
+      request->send(404, "application/json", "{}");
+      return;
+    }
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+    request->send(200, "application/json", jsonString);
+  });
 
   webServer.onNotFound([](AsyncWebServerRequest *request) {
     request->send(404);
@@ -386,17 +453,6 @@ bool irRead(int no, JsonDocument &doc)
   return true;
 }
 // ---------------------------------------------
-
-double temperatures[SCREEN_WIDTH] = {0};
-double pressures[SCREEN_WIDTH] = {0};
-double humidities[SCREEN_WIDTH] = {0};
-int currentIndex = 0;
-int counter = 0;
-bool collectBME280Flag = true;
-typedef void (*DisplayScene)(void);
-DisplayScene scenes[] = {displayTemperature, displayHumidity, displayPressure};
-DisplayScene scene;
-
 void setCollectBME280Flag()
 {
   collectBME280Flag = true;
@@ -416,7 +472,7 @@ void displayTemperature()
 {
   for (int i = 0; i < SCREEN_WIDTH; i++)
   {
-    int idx = currentIndex - i;
+    int idx = currentIndex - i - 1;
     if (idx < 0)
       idx += SCREEN_WIDTH;
     double m = (double)SCREEN_HEIGHT / (TEMPERATURE_MAX - TEMPERATURE_MIN);
@@ -432,7 +488,7 @@ void displayHumidity()
 {
   for (int i = 0; i < SCREEN_WIDTH; i++)
   {
-    int idx = currentIndex - i;
+    int idx = currentIndex - i - 1;
     if (idx < 0)
       idx += SCREEN_WIDTH;
     double m = (double)SCREEN_HEIGHT / (HUMIDITY_MAX - HUMIDITY_MIN);
@@ -449,7 +505,7 @@ void displayPressure()
 {
   for (int i = 0; i < SCREEN_WIDTH; i++)
   {
-    int idx = currentIndex - i;
+    int idx = currentIndex - i - 1;
     if (idx < 0)
       idx += SCREEN_WIDTH;
     double m = (double)SCREEN_HEIGHT / (PRESSURE_MAX - PRESSURE_MIM);
