@@ -15,6 +15,7 @@
 #define TEMPERATURE_MIN 0
 
 #define SERIAL_BAUD 115200
+#define MAX_IR_SAVE_NUM 10
 
 int RECV_PIN = 5;
 int BUTTON_PIN = 17;
@@ -175,6 +176,12 @@ void setupWebserver()
     JsonArray data = jsonObj["data"];
     int no = jsonObj["no"];
 
+    if (no < 0 || no >= MAX_IR_SAVE_NUM)
+    {
+      request->send(500, "text", "ng");
+      return;
+    }
+
     // 保存する
     // {"data":[....], "name": "あいうえお"}
     DynamicJsonDocument doc(1500);
@@ -187,6 +194,44 @@ void setupWebserver()
                                                                                1500); // maxJsonBufferSize
   irsaveHandler->setMethod(HTTP_POST);
   webServer.addHandler(irsaveHandler);
+
+  webServer.on("/irlist", HTTP_GET, [](AsyncWebServerRequest *request) {
+    // {"0": "aaa", 4: "bbbb", ....}
+    DynamicJsonDocument doc(1500);
+    for (int i = 0; i < MAX_IR_SAVE_NUM; i++)
+    {
+      DynamicJsonDocument ir(1500);
+      if (irRead(i, ir))
+      {
+        doc[String(i)] = ir["name"];
+      }
+    }
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+    request->send(200, "application/json", jsonString);
+  });
+
+  AsyncCallbackJsonWebHandler *irrenameHandler = new AsyncCallbackJsonWebHandler("/irrename", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    Serial.println("irrename");
+    JsonObject jsonObj = json.as<JsonObject>();
+    int no = jsonObj["no"];
+    String name = jsonObj["name"];
+
+    DynamicJsonDocument ir(1500);
+    if (!irRead(no, ir))
+    {
+      request->send(500, "text", "ng");
+      return;
+    }
+    ir["name"] = name;
+    irSave(no, ir);
+
+    request->send(200, "text", "ok");
+  },
+                                                                                 1500); // maxJsonBufferSize
+  irrenameHandler->setMethod(HTTP_POST);
+  webServer.addHandler(irrenameHandler);
 
   webServer.onNotFound([](AsyncWebServerRequest *request) {
     request->send(404);
