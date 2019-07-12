@@ -15,6 +15,12 @@
 #define TEMPERATURE_MAX 50
 #define TEMPERATURE_MIN 0
 
+#define HUMIDITY_MAX 100
+#define HUMIDITY_MIN 0
+
+#define PRESSURE_MAX (1013 + 25)
+#define PRESSURE_MIM (1013 - 25)
+
 #define SERIAL_BAUD 115200
 #define MAX_IR_SAVE_NUM 10
 
@@ -387,20 +393,72 @@ double humidities[SCREEN_WIDTH] = {0};
 int currentIndex = 0;
 int counter = 0;
 bool collectBME280Flag = true;
+typedef void (*DisplayScene)(void);
+DisplayScene scenes[] = {displayTemperature, displayHumidity, displayPressure};
+DisplayScene scene;
 
 void setCollectBME280Flag()
 {
   collectBME280Flag = true;
 }
 
-double currentTemperature()
+double currentValue(double *value)
 {
   int idx = currentIndex - 1;
   if (idx < 0)
   {
     idx = SCREEN_WIDTH - 1;
   }
-  return temperatures[idx];
+  return value[idx];
+}
+
+void displayTemperature()
+{
+  for (int i = 0; i < SCREEN_WIDTH; i++)
+  {
+    int idx = currentIndex - i;
+    if (idx < 0)
+      idx += SCREEN_WIDTH;
+    double m = (double)SCREEN_HEIGHT / (TEMPERATURE_MAX - TEMPERATURE_MIN);
+    double t = (temperatures[idx] - TEMPERATURE_MIN) * m;
+    display.setPixel(SCREEN_WIDTH - i, SCREEN_HEIGHT - t);
+  }
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.setFont(ArialMT_Plain_10);
+  display.drawString(0, 0, "Temp    :" + String(currentValue(temperatures)) + "C");
+}
+
+void displayHumidity()
+{
+  for (int i = 0; i < SCREEN_WIDTH; i++)
+  {
+    int idx = currentIndex - i;
+    if (idx < 0)
+      idx += SCREEN_WIDTH;
+    double m = (double)SCREEN_HEIGHT / (HUMIDITY_MAX - HUMIDITY_MIN);
+    double v = (humidities[idx] - HUMIDITY_MIN) * m;
+    display.setPixel(SCREEN_WIDTH - i, SCREEN_HEIGHT - v);
+  }
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.setFont(ArialMT_Plain_10);
+  display.drawString(0, 0, "Humidity:" + String(currentValue(humidities)) + "%");
+  //display.drawString(0, 40, "Pressure:" + String(pressure) + "hPa");
+}
+
+void displayPressure()
+{
+  for (int i = 0; i < SCREEN_WIDTH; i++)
+  {
+    int idx = currentIndex - i;
+    if (idx < 0)
+      idx += SCREEN_WIDTH;
+    double m = (double)SCREEN_HEIGHT / (PRESSURE_MAX - PRESSURE_MIM);
+    double v = (pressures[idx] - PRESSURE_MIM) * m;
+    display.setPixel(SCREEN_WIDTH - i, SCREEN_HEIGHT - v);
+  }
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.setFont(ArialMT_Plain_10);
+  display.drawString(0, 0, "Pressure:" + String(currentValue(pressures)) + "hPa");
 }
 
 void loopBME()
@@ -413,24 +471,12 @@ void loopBME()
     pressures[currentIndex] = pressure;
     humidities[currentIndex] = humidity;
     currentIndex = (currentIndex + 1) % SCREEN_WIDTH;
+    scene = scenes[(currentIndex / 3) % 3];
   }
   collectBME280Flag = false;
 
   display.clear();
   display.setColor(WHITE);
-  for (int i = 0; i < SCREEN_WIDTH; i++)
-  {
-    int idx = currentIndex - i;
-    if (idx < 0)
-      idx += SCREEN_WIDTH;
-    double m = (double)SCREEN_HEIGHT / TEMPERATURE_MAX;
-    double t = temperatures[idx] * m;
-    display.setPixel(SCREEN_WIDTH - i, SCREEN_HEIGHT - t);
-  }
-  display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.setFont(ArialMT_Plain_10);
-  display.drawString(0, 0, "Temp    :" + String(currentTemperature()) + "C");
-  //display.drawString(0, 20, "Humidity:" + String(humidity) + "%");
-  //display.drawString(0, 40, "Pressure:" + String(pressure) + "hPa");
+  scene();
   display.display();
 }
