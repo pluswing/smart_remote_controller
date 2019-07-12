@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <AsyncJson.h>
 #include <SPIFFS.h>
+#include <Ticker.h>
 #include "config.h"
 
 #define SCREEN_WIDTH 128
@@ -25,6 +26,7 @@ int SEND_PIN = 4;
 ESP32_BME280_I2C bme280i2c(0x76, /*scl*/ 14, /*sda*/ 27, 30000);
 SSD1306Wire display(0x3c, 27, 14);
 AsyncWebServer webServer(80);
+Ticker bme280Ticker;
 
 void setup()
 {
@@ -34,6 +36,7 @@ void setup()
   setupBME();
   setupWIFI();
   setupWebserver();
+  setupTicker();
 }
 
 void loop()
@@ -241,6 +244,11 @@ void setupWebserver()
   Serial.println("Web server started");
 }
 
+void setupTicker()
+{
+  bme280Ticker.attach_ms(1000, setCollectBME280Flag);
+}
+
 bool irRecv(unsigned short *irData, unsigned int *irLength)
 {
   // ⑥irRecv関数内で利用する変数（ローカル変数）を定義
@@ -374,34 +382,39 @@ bool irRead(int no, JsonDocument &doc)
 // ---------------------------------------------
 
 double temperatures[SCREEN_WIDTH] = {0};
+double pressures[SCREEN_WIDTH] = {0};
+double humidities[SCREEN_WIDTH] = {0};
 int currentIndex = 0;
-
 int counter = 0;
+bool collectBME280Flag = true;
+
+void setCollectBME280Flag()
+{
+  collectBME280Flag = true;
+}
+
+double currentTemperature()
+{
+  int idx = currentIndex - 1;
+  if (idx < 0)
+  {
+    idx = SCREEN_WIDTH - 1;
+  }
+  return temperatures[idx];
+}
+
 void loopBME()
 {
-  // FIXME
-  counter += 1;
-  if (counter < 1000000)
+  if (collectBME280Flag)
   {
-    return;
+    double temperature, pressure, humidity;
+    bme280i2c.Read_All(&temperature, &pressure, &humidity);
+    temperatures[currentIndex] = temperature;
+    pressures[currentIndex] = pressure;
+    humidities[currentIndex] = humidity;
+    currentIndex = (currentIndex + 1) % SCREEN_WIDTH;
   }
-  counter = 0;
-
-  double temperature, pressure, humidity;
-  bme280i2c.Read_All(&temperature, &pressure, &humidity);
-  /*
-  Serial.print("Temp: ");
-  Serial.print(temperature);
-  Serial.print("C");
-  Serial.print(" Humidity: ");
-  Serial.print(humidity);
-  Serial.print("%");
-  Serial.print(" tPressure: ");
-  Serial.print(pressure);
-  Serial.println("hPa");
-*/
-  temperatures[currentIndex] = temperature;
-  currentIndex = (currentIndex + 1) % SCREEN_WIDTH;
+  collectBME280Flag = false;
 
   display.clear();
   display.setColor(WHITE);
@@ -416,7 +429,7 @@ void loopBME()
   }
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.setFont(ArialMT_Plain_10);
-  display.drawString(0, 0, "Temp    :" + String(temperature) + "C");
+  display.drawString(0, 0, "Temp    :" + String(currentTemperature()) + "C");
   //display.drawString(0, 20, "Humidity:" + String(humidity) + "%");
   //display.drawString(0, 40, "Pressure:" + String(pressure) + "hPa");
   display.display();
